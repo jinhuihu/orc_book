@@ -358,17 +358,21 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton("添加") { _, _ ->
                 // 直接保存书籍
                 val book = bookInfo.toBook()
-                bookList.add(0, book)
-                updateBookList()
-                dataManager.saveBooks(bookList)
-                
-                Toast.makeText(this, "书籍已添加", Toast.LENGTH_SHORT).show()
-                showBookInfoDetails(book)
+                if (book != null) {
+                    bookList.add(0, book)
+                    updateBookList()
+                    dataManager.saveBooks(bookList)
+                    
+                    Toast.makeText(this, "书籍已添加", Toast.LENGTH_SHORT).show()
+                    showBookInfoDetails(book)
+                }
             }
             .setNeutralButton("编辑") { _, _ ->
                 // 允许编辑后再保存
                 val book = bookInfo.toBook()
-                showEditBookDialog(book, isNewBook = true)
+                if (book != null) {
+                    showEditBookDialog(book, isNewBook = true)
+                }
             }
             .setNegativeButton("取消", null)
             .show()
@@ -795,8 +799,9 @@ class MainActivity : AppCompatActivity() {
         etPrice.setText(book.price)
         
         // 显示对话框
+        val dialogTitle = if (isNewBook) "编辑并添加书籍" else getString(R.string.edit_book)
         AlertDialog.Builder(this)
-            .setTitle(if (isNewBook) "编辑并添加书籍" else R.string.edit_book)
+            .setTitle(dialogTitle)
             .setView(dialogView)
             .setPositiveButton(R.string.save) { _, _ ->
                 // 获取编辑后的值
