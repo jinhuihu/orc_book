@@ -23,7 +23,7 @@
     <string name="scan_front">扫描正面</string>
     <string name="scan_back">扫描背面</string>
     <string name="scan_back_for_isbn">查询书籍信息</string>
-    <parameter name="scan_back_prompt">已识别ISBN，正在查询书籍详细信息...</string>
+    <string name="scan_back_prompt">已识别ISBN，正在查询书籍详细信息...</string>
     <string name="scan_isbn_first">请先扫描书籍背面的ISBN条形码</string>
     <string name="isbn_query_success">ISBN查询成功</string>
     <string name="isbn_query_failed">ISBN查询失败，请重试</string>
