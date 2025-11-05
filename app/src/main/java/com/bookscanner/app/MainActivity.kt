@@ -37,6 +37,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var excelExporter: ExcelExporter
     private lateinit var bookAdapter: BookAdapter
     private lateinit var bookSearchService: BookSearchService
+    private lateinit var dataManager: DataManager
 
     // 书籍列表
     private val bookList = mutableListOf<Book>()
@@ -106,9 +107,13 @@ class MainActivity : AppCompatActivity() {
         ocrManager = OCRManager(this)
         excelExporter = ExcelExporter(this)
         bookSearchService = BookSearchService()
+        dataManager = DataManager(this)
 
         // 设置工具栏
         setSupportActionBar(binding.toolbar)
+
+        // 加载已保存的数据
+        loadSavedBooks()
 
         // 初始化RecyclerView
         setupRecyclerView()
@@ -118,6 +123,15 @@ class MainActivity : AppCompatActivity() {
 
         // 更新UI
         updateUI()
+    }
+
+    /**
+     * 加载已保存的书籍数据
+     */
+    private fun loadSavedBooks() {
+        val savedBooks = dataManager.loadBooks()
+        bookList.clear()
+        bookList.addAll(savedBooks)
     }
 
     /**
@@ -133,6 +147,9 @@ class MainActivity : AppCompatActivity() {
                     .setPositiveButton(R.string.confirm) { _, _ ->
                         bookList.remove(book)
                         updateBookList()
+                        
+                        // 保存到持久化存储
+                        dataManager.saveBooks(bookList)
                     }
                     .setNegativeButton(R.string.cancel, null)
                     .show()
@@ -510,6 +527,10 @@ class MainActivity : AppCompatActivity() {
         if (book != null) {
             bookList.add(0, book)
             updateBookList()
+            
+            // 保存到持久化存储
+            dataManager.saveBooks(bookList)
+            
             showBookInfoDetails(book)
             Toast.makeText(this, "书籍信息已保存", Toast.LENGTH_SHORT).show()
         }
@@ -672,6 +693,9 @@ class MainActivity : AppCompatActivity() {
                         .setPositiveButton(R.string.confirm) { _, _ ->
                             bookList.clear()
                             updateBookList()
+                            
+                            // 清空持久化存储
+                            dataManager.clearBooks()
                         }
                         .setNegativeButton(R.string.cancel, null)
                         .show()
@@ -741,6 +765,10 @@ class MainActivity : AppCompatActivity() {
                 if (index >= 0) {
                     bookList[index] = updatedBook
                     updateBookList()
+                    
+                    // 保存到持久化存储
+                    dataManager.saveBooks(bookList)
+                    
                     Toast.makeText(this, R.string.edit_success, Toast.LENGTH_SHORT).show()
                 }
             }
