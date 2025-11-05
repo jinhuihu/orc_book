@@ -112,11 +112,11 @@ class MainActivity : AppCompatActivity() {
         // 设置工具栏
         setSupportActionBar(binding.toolbar)
 
-        // 加载已保存的数据
-        loadSavedBooks()
-
         // 初始化RecyclerView
         setupRecyclerView()
+
+        // 加载已保存的数据（必须在RecyclerView初始化之后）
+        loadSavedBooks()
 
         // 设置按钮点击事件
         setupButtonListeners()
@@ -132,6 +132,11 @@ class MainActivity : AppCompatActivity() {
         val savedBooks = dataManager.loadBooks()
         bookList.clear()
         bookList.addAll(savedBooks)
+        
+        // 通知RecyclerView刷新数据
+        if (savedBooks.isNotEmpty()) {
+            updateBookList()
+        }
     }
 
     /**
