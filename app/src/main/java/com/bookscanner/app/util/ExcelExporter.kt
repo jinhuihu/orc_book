@@ -60,12 +60,10 @@ class ExcelExporter(private val context: Context) {
                 row.createCell(2).setCellValue(book.getFormattedTime())
             }
 
-            // 自动调整列宽
-            for (i in headers.indices) {
-                sheet.autoSizeColumn(i)
-                // 增加一些额外的宽度
-                sheet.setColumnWidth(i, sheet.getColumnWidth(i) + 1000)
-            }
+            // 手动设置列宽（Android 不支持 autoSizeColumn）
+            sheet.setColumnWidth(0, 3000)   // 序号列：宽度 3000
+            sheet.setColumnWidth(1, 10000)  // 书名列：宽度 10000
+            sheet.setColumnWidth(2, 6000)   // 扫描时间列：宽度 6000
 
             // 生成文件名
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
