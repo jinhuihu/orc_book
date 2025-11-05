@@ -299,13 +299,26 @@ class MainActivity : AppCompatActivity() {
                     ImageProcessor.compressBitmap(bitmap)
                 }
 
-                // OCR识别详细信息
+                // OCR识别书籍正面信息（书名、作者、出版社）
                 val bookInfo = withContext(Dispatchers.Default) {
                     ocrManager.recognizeBookInfo(compressedBitmap)
                 }
 
-                // 处理结果
-                handleBookInfoResult(bookInfo)
+                showLoading(false)
+
+                // 验证是否识别到书名
+                if (bookInfo.title.isNullOrEmpty()) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "未识别到书名，请确保图片清晰并包含书名",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return@launch
+                }
+
+                // 显示识别结果并确认
+                showGalleryBookConfirmDialog(bookInfo)
+                
             } catch (e: Exception) {
                 showLoading(false)
                 Toast.makeText(
@@ -315,6 +328,50 @@ class MainActivity : AppCompatActivity() {
                 ).show()
             }
         }
+    }
+    
+    /**
+     * 显示图片识别结果确认对话框
+     */
+    private fun showGalleryBookConfirmDialog(bookInfo: BookInfo) {
+        val message = buildString {
+            append("识别结果：\n\n")
+            append("书名：${bookInfo.title ?: "未识别"}\n")
+            if (!bookInfo.author.isNullOrEmpty()) {
+                append("作者：${bookInfo.author}\n")
+            }
+            if (!bookInfo.publisher.isNullOrEmpty()) {
+                append("出版社：${bookInfo.publisher}\n")
+            }
+            if (!bookInfo.isbn.isNullOrEmpty()) {
+                append("ISBN：${bookInfo.isbn}\n")
+            }
+            if (!bookInfo.price.isNullOrEmpty()) {
+                append("价格：${bookInfo.price}\n")
+            }
+            append("\n确认添加此书籍吗？")
+        }
+        
+        AlertDialog.Builder(this)
+            .setTitle("识别完成")
+            .setMessage(message)
+            .setPositiveButton("添加") { _, _ ->
+                // 直接保存书籍
+                val book = bookInfo.toBook()
+                bookList.add(0, book)
+                updateBookList()
+                dataManager.saveBooks(bookList)
+                
+                Toast.makeText(this, "书籍已添加", Toast.LENGTH_SHORT).show()
+                showBookInfoDetails(book)
+            }
+            .setNeutralButton("编辑") { _, _ ->
+                // 允许编辑后再保存
+                val book = bookInfo.toBook()
+                showEditBookDialog(book, isNewBook = true)
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     /**
@@ -720,7 +777,7 @@ class MainActivity : AppCompatActivity() {
     /**
      * 显示编辑书籍对话框
      */
-    private fun showEditBookDialog(book: Book) {
+    private fun showEditBookDialog(book: Book, isNewBook: Boolean = false) {
         val dialogView = layoutInflater.inflate(R.layout.dialog_edit_book, null)
         
         // 获取输入框
@@ -739,7 +796,7 @@ class MainActivity : AppCompatActivity() {
         
         // 显示对话框
         AlertDialog.Builder(this)
-            .setTitle(R.string.edit_book)
+            .setTitle(if (isNewBook) "编辑并添加书籍" else R.string.edit_book)
             .setView(dialogView)
             .setPositiveButton(R.string.save) { _, _ ->
                 // 获取编辑后的值
@@ -765,16 +822,22 @@ class MainActivity : AppCompatActivity() {
                     scannedTime = book.scannedTime
                 )
                 
-                // 更新列表
-                val index = bookList.indexOf(book)
-                if (index >= 0) {
-                    bookList[index] = updatedBook
+                if (isNewBook) {
+                    // 添加新书籍
+                    bookList.add(0, updatedBook)
                     updateBookList()
-                    
-                    // 保存到持久化存储
                     dataManager.saveBooks(bookList)
-                    
-                    Toast.makeText(this, R.string.edit_success, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "书籍已添加", Toast.LENGTH_SHORT).show()
+                    showBookInfoDetails(updatedBook)
+                } else {
+                    // 更新现有书籍
+                    val index = bookList.indexOf(book)
+                    if (index >= 0) {
+                        bookList[index] = updatedBook
+                        updateBookList()
+                        dataManager.saveBooks(bookList)
+                        Toast.makeText(this, R.string.edit_success, Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
             .setNegativeButton(R.string.cancel, null)
