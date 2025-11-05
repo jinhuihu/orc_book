@@ -250,18 +250,19 @@ class OCRManager(context: Context) {
     
     /**
      * 提取作者信息
-     * 查找包含"著"、"作者"、"Author"等关键词的文本
+     * 查找包含"著"、"编"、"作者"等关键词的文本
      */
     private fun extractAuthor(text: String): String? {
         val lines = text.split("\n").map { it.trim() }
         
         for (line in lines) {
-            // 模式1：[国家] 作者名 著 或 [国家] 作者名 (英文名) 著
-            if (line.contains("著") && line.length in 3..80) {
+            // 模式1：[国家] 作者名 著/编 或 [国家] 作者名 (英文名) 著/编
+            if ((line.contains("著") || line.contains("编")) && line.length in 3..80) {
                 var author = line
                     .replace(Regex("\\[.*?\\]"), "") // 移除 [美]、[中] 等
                     .replace(Regex("\\(.*?\\)"), "") // 暂时移除英文名，后面再加回
                     .replace("著", "")
+                    .replace("编", "")
                     .replace("作者", "")
                     .replace(Regex("[：:]"), "")
                     .trim()
@@ -281,6 +282,18 @@ class OCRManager(context: Context) {
             if (line.startsWith("作者") && line.length < 50) {
                 val author = line
                     .replace("作者", "")
+                    .replace(Regex("[：:]"), "")
+                    .trim()
+                if (author.isNotEmpty() && author.length in 2..30) {
+                    return author
+                }
+            }
+            
+            // 模式3：XX 编著
+            if (line.contains("编著") && line.length in 3..50) {
+                val author = line
+                    .replace(Regex("\\[.*?\\]"), "")
+                    .replace("编著", "")
                     .replace(Regex("[：:]"), "")
                     .trim()
                 if (author.isNotEmpty() && author.length in 2..30) {

@@ -474,23 +474,28 @@ class MainActivity : AppCompatActivity() {
                     permissionManager.requestCameraPermission(cameraPermissionLauncher)
                 }
             }
-            .setNegativeButton("跳过") { _, _ ->
+            .setNegativeButton("跳过") { dialog, _ ->
                 // 跳过当前字段，检查下一个
                 when (step) {
                     ScanStep.SCAN_TITLE -> {
-                        // 书名不能跳过
+                        // 书名不能跳过，不关闭对话框
                         Toast.makeText(this, R.string.title_required, Toast.LENGTH_SHORT).show()
+                        dialog.dismiss()
                         showScanStepDialog(step)
                     }
                     ScanStep.SCAN_AUTHOR -> {
                         // 跳过作者，检查出版社
+                        dialog.dismiss()
                         checkNextStepAndPrompt()
                     }
                     ScanStep.SCAN_PUBLISHER -> {
                         // 跳过出版社，直接保存
+                        dialog.dismiss()
                         saveCurrentBook()
                     }
-                    else -> {}
+                    else -> {
+                        dialog.dismiss()
+                    }
                 }
             }
             .setCancelable(false)
