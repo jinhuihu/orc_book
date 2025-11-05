@@ -12,7 +12,8 @@ import com.bookscanner.app.model.Book
  * 书籍列表适配器
  */
 class BookAdapter(
-    private val onDeleteClick: (Book) -> Unit
+    private val onDeleteClick: (Book) -> Unit,
+    private val onItemClick: (Book) -> Unit
 ) : ListAdapter<Book, BookAdapter.BookViewHolder>(BookDiffCallback()) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): BookViewHolder {
@@ -21,7 +22,7 @@ class BookAdapter(
             parent,
             false
         )
-        return BookViewHolder(binding, onDeleteClick)
+        return BookViewHolder(binding, onDeleteClick, onItemClick)
     }
 
     override fun onBindViewHolder(holder: BookViewHolder, position: Int) {
@@ -33,13 +34,21 @@ class BookAdapter(
      */
     class BookViewHolder(
         private val binding: ItemBookBinding,
-        private val onDeleteClick: (Book) -> Unit
+        private val onDeleteClick: (Book) -> Unit,
+        private val onItemClick: (Book) -> Unit
     ) : RecyclerView.ViewHolder(binding.root) {
 
         fun bind(book: Book) {
             binding.tvBookTitle.text = book.title
             binding.tvBookDetail.text = book.getDetailInfo()
             binding.tvScannedTime.text = book.getFormattedTime()
+            
+            // 点击整个项目进入编辑
+            binding.root.setOnClickListener {
+                onItemClick(book)
+            }
+            
+            // 点击删除按钮
             binding.btnDelete.setOnClickListener {
                 onDeleteClick(book)
             }

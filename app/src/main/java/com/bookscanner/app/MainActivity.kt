@@ -115,18 +115,24 @@ class MainActivity : AppCompatActivity() {
      * 设置RecyclerView
      */
     private fun setupRecyclerView() {
-        bookAdapter = BookAdapter { book ->
-            // 删除书籍
-            AlertDialog.Builder(this)
-                .setTitle(R.string.delete)
-                .setMessage("确定要删除《${book.title}》吗？")
-                .setPositiveButton(R.string.confirm) { _, _ ->
-                    bookList.remove(book)
-                    updateBookList()
-                }
-                .setNegativeButton(R.string.cancel, null)
-                .show()
-        }
+        bookAdapter = BookAdapter(
+            onDeleteClick = { book ->
+                // 删除书籍
+                AlertDialog.Builder(this)
+                    .setTitle(R.string.delete)
+                    .setMessage("确定要删除《${book.title}》吗？")
+                    .setPositiveButton(R.string.confirm) { _, _ ->
+                        bookList.remove(book)
+                        updateBookList()
+                    }
+                    .setNegativeButton(R.string.cancel, null)
+                    .show()
+            },
+            onItemClick = { book ->
+                // 编辑书籍
+                showEditBookDialog(book)
+            }
+        )
 
         binding.recyclerView.apply {
             layoutManager = LinearLayoutManager(this@MainActivity)
@@ -726,6 +732,66 @@ class MainActivity : AppCompatActivity() {
         ocrManager.close()
     }
 
+    /**
+     * 显示编辑书籍对话框
+     */
+    private fun showEditBookDialog(book: Book) {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_edit_book, null)
+        
+        // 获取输入框
+        val etTitle = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.etTitle)
+        val etAuthor = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.etAuthor)
+        val etPublisher = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.etPublisher)
+        val etISBN = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.etISBN)
+        val etPrice = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.etPrice)
+        
+        // 填充当前值
+        etTitle.setText(book.title)
+        etAuthor.setText(book.author)
+        etPublisher.setText(book.publisher)
+        etISBN.setText(book.isbn)
+        etPrice.setText(book.price)
+        
+        // 显示对话框
+        AlertDialog.Builder(this)
+            .setTitle(R.string.edit_book)
+            .setView(dialogView)
+            .setPositiveButton(R.string.save) { _, _ ->
+                // 获取编辑后的值
+                val newTitle = etTitle.text.toString().trim()
+                val newAuthor = etAuthor.text.toString().trim()
+                val newPublisher = etPublisher.text.toString().trim()
+                val newISBN = etISBN.text.toString().trim()
+                val newPrice = etPrice.text.toString().trim()
+                
+                // 验证书名不能为空
+                if (newTitle.isEmpty()) {
+                    Toast.makeText(this, R.string.title_required, Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                
+                // 创建新的Book对象
+                val updatedBook = Book(
+                    title = newTitle,
+                    author = newAuthor,
+                    publisher = newPublisher,
+                    isbn = newISBN,
+                    price = newPrice,
+                    scannedTime = book.scannedTime
+                )
+                
+                // 更新列表
+                val index = bookList.indexOf(book)
+                if (index >= 0) {
+                    bookList[index] = updatedBook
+                    updateBookList()
+                    Toast.makeText(this, R.string.edit_success, Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+    
     override fun onBackPressed() {
         if (binding.previewView.visibility == View.VISIBLE) {
             stopCameraPreview()

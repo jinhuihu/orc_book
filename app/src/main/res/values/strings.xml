@@ -37,6 +37,10 @@
     <string name="price">价格</string>
     <string name="no_info">暂无</string>
     <string name="complete_info">补充信息</string>
+    <string name="edit_book">编辑书籍信息</string>
+    <string name="save">保存</string>
+    <string name="edit_success">修改成功</string>
+    <string name="title_required">书名不能为空</string>
     <string name="searching_book_info">正在搜索图书信息…</string>
     <string name="search_success">搜索成功，信息已补充</string>
     <string name="search_failed">在线搜索失败，建议扫描背面</string>
