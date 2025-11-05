@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">书籍扫描器</string>
-    <string name="scan_book">扫描书籍</string>
+    <string name="scan_book">扫描ISBN</string>
     <string name="choose_image">选择图片</string>
     <string name="export_excel">导出Excel</string>
     <string name="book_list">书籍列表</string>
     <string name="camera_permission_required">需要相机权限才能扫描书籍</string>
     <string name="storage_permission_required">需要存储权限才能保存Excel文件</string>
-    <string name="scanning">正在识别…</string>
+    <string name="scanning">正在识别ISBN…</string>
     <string name="export_success">Excel文件已保存到: %s</string>
     <string name="export_failed">导出失败: %s</string>
     <string name="no_books">还没有扫描任何书籍</string>
@@ -22,8 +22,11 @@
     <string name="no_text_detected">未检测到文字</string>
     <string name="scan_front">扫描正面</string>
     <string name="scan_back">扫描背面</string>
-    <string name="scan_back_for_isbn">扫描背面补充ISBN？</string>
-    <string name="scan_back_prompt">是否扫描书籍背面补充ISBN和价格信息？</string>
+    <string name="scan_back_for_isbn">查询书籍信息</string>
+    <parameter name="scan_back_prompt">已识别ISBN，正在查询书籍详细信息...</string>
+    <string name="scan_isbn_first">请先扫描书籍背面的ISBN条形码</string>
+    <string name="isbn_query_success">ISBN查询成功</string>
+    <string name="isbn_query_failed">ISBN查询失败，请重试</string>
     <string name="skip">跳过</string>
     <string name="scan">扫描</string>
     <string name="author">作者</string>

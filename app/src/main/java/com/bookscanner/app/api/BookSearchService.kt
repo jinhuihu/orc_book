@@ -18,25 +18,47 @@ import java.net.URLEncoder
 class BookSearchService {
 
     /**
-     * 通过书名搜索图书信息
-     * 优先使用豆瓣API（中文书籍信息更全），备用Google Books
+     * 通过ISBN查询图书信息（最准确）
+     * @param isbn ISBN书号（13位或10位）
+     * @return 查询到的图书信息
+     */
+    suspend fun searchBookByISBN(isbn: String): BookInfo? = withContext(Dispatchers.IO) {
+        try {
+            // 清理ISBN，只保留数字
+            val cleanISBN = isbn.replace(Regex("[^0-9]"), "")
+            
+            if (cleanISBN.length !in 10..13) {
+                Log.w(TAG, "无效的ISBN: $isbn")
+                return@withContext null
+            }
+            
+            Log.d(TAG, "通过ISBN查询: $cleanISBN")
+            
+            // 1. 优先使用Google Books（ISBN查询更可靠）
+            val googleResult = searchByISBNFromGoogle(cleanISBN)
+            if (googleResult != null) {
+                Log.d(TAG, "Google Books通过ISBN查询成功")
+                return@withContext googleResult
+            }
+            
+            Log.w(TAG, "ISBN查询无结果: $cleanISBN")
+            null
+        } catch (e: Exception) {
+            Log.e(TAG, "ISBN查询失败", e)
+            null
+        }
+    }
+    
+    /**
+     * 通过书名搜索图书信息（备用方案）
      * @param title 书名
      * @return 搜索到的图书信息列表
      */
     suspend fun searchBookByTitle(title: String): List<BookInfo> = withContext(Dispatchers.IO) {
         try {
-            // 1. 优先使用豆瓣读书API（中文书籍信息更全面）
-            Log.d(TAG, "正在豆瓣搜索: $title")
-            var results = searchFromDouban(title)
-            
-            if (results.isNotEmpty()) {
-                Log.d(TAG, "豆瓣搜索成功，找到 ${results.size} 个结果")
-                return@withContext results
-            }
-            
-            // 2. 豆瓣搜索失败，尝试Google Books
-            Log.d(TAG, "豆瓣搜索无结果，尝试Google Books")
-            results = searchFromGoogleBooks(title)
+            // 直接使用Google Books搜索（豆瓣API需要Key且已限制）
+            Log.d(TAG, "正在Google Books搜索: $title")
+            val results = searchFromGoogleBooks(title)
             
             if (results.isNotEmpty()) {
                 Log.d(TAG, "Google Books搜索成功，找到 ${results.size} 个结果")
@@ -52,7 +74,89 @@ class BookSearchService {
     }
     
     /**
-     * 从豆瓣读书API搜索
+     * 通过ISBN从Google Books查询（单个结果）
+     */
+    private fun searchByISBNFromGoogle(isbn: String): BookInfo? {
+        return try {
+            val urlString = "https://www.googleapis.com/books/v1/volumes?q=isbn:$isbn"
+            
+            val url = URL(urlString)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 10000
+            connection.readTimeout = 10000
+            
+            val responseCode = connection.responseCode
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                val reader = BufferedReader(InputStreamReader(connection.inputStream, "UTF-8"))
+                val response = reader.readText()
+                reader.close()
+                
+                Log.d(TAG, "Google Books ISBN查询响应: ${response.take(500)}...")
+                
+                // 解析响应
+                val json = JSONObject(response)
+                val items = json.optJSONArray("items")
+                
+                if (items != null && items.length() > 0) {
+                    val volumeInfo = items.getJSONObject(0).getJSONObject("volumeInfo")
+                    
+                    val title = volumeInfo.optString("title", "")
+                    val subtitle = volumeInfo.optString("subtitle", "")
+                    val fullTitle = if (subtitle.isNotEmpty()) "$title: $subtitle" else title
+                    
+                    // 提取作者
+                    val authors = volumeInfo.optJSONArray("authors")
+                    val author = if (authors != null && authors.length() > 0) {
+                        val authorList = mutableListOf<String>()
+                        for (j in 0 until authors.length()) {
+                            authorList.add(authors.getString(j))
+                        }
+                        authorList.joinToString(", ")
+                    } else null
+                    
+                    // 提取出版社
+                    val publisher = volumeInfo.optString("publisher", null)
+                        ?.takeIf { it.isNotEmpty() && it != "null" }
+                    
+                    // 提取价格（如果有）
+                    val saleInfo = items.getJSONObject(0).optJSONObject("saleInfo")
+                    val price = saleInfo?.optJSONObject("listPrice")?.let { priceObj ->
+                        val amount = priceObj.optDouble("amount", 0.0)
+                        val currency = priceObj.optString("currencyCode", "")
+                        if (amount > 0) {
+                            when (currency) {
+                                "CNY" -> "¥%.2f".format(amount)
+                                "USD" -> "$%.2f".format(amount)
+                                else -> "%.2f $currency".format(amount)
+                            }
+                        } else null
+                    }
+                    
+                    Log.d(TAG, "ISBN查询结果 - 书名:$fullTitle, 作者:$author, 出版:$publisher, 价格:$price")
+                    
+                    BookInfo(
+                        title = fullTitle,
+                        author = author,
+                        publisher = publisher,
+                        isbn = "ISBN $isbn",
+                        price = price
+                    )
+                } else {
+                    null
+                }
+            } else {
+                Log.w(TAG, "Google Books ISBN查询HTTP错误: $responseCode")
+                null
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Google Books ISBN查询失败", e)
+            null
+        }
+    }
+    
+    /**
+     * 从豆瓣读书API搜索（需要API Key，已弃用）
      */
     private fun searchFromDouban(title: String): List<BookInfo> {
         return try {
