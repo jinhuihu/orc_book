@@ -190,7 +190,7 @@ class MainActivity : AppCompatActivity() {
     private fun stopCameraPreview() {
         binding.previewView.visibility = View.GONE
         binding.bookListContainer.visibility = View.VISIBLE
-        cameraManager.shutdown()
+        cameraManager.stopCamera()  // 只停止相机，不关闭线程池
     }
 
     /**

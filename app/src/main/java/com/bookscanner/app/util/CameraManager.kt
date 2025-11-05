@@ -112,11 +112,18 @@ class CameraManager(private val context: Context) {
     }
 
     /**
-     * 关闭相机
+     * 停止相机预览（不关闭线程池）
+     */
+    fun stopCamera() {
+        cameraProvider?.unbindAll()
+    }
+    
+    /**
+     * 关闭相机和线程池（仅在 Activity 销毁时调用）
      */
     fun shutdown() {
-        cameraExecutor.shutdown()
         cameraProvider?.unbindAll()
+        cameraExecutor.shutdown()
     }
 
     companion object {
