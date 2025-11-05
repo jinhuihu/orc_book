@@ -306,23 +306,52 @@ class MainActivity : AppCompatActivity() {
     private fun handleBookInfoResult(bookInfo: BookInfo) {
         showLoading(false)
         
-        // 第一步：检查是否识别到ISBN
-        val isbn = bookInfo.isbn
-        if (!isbn.isNullOrEmpty()) {
-            // 识别到ISBN，通过ISBN查询完整信息
-            Toast.makeText(this, "ISBN识别成功，正在查询书籍信息...", Toast.LENGTH_SHORT).show()
-            queryBookInfoByISBN(isbn, bookInfo)
-        } else {
-            // 未识别到ISBN
-            val title = bookInfo.title
-            if (title.isNullOrEmpty()) {
-                Toast.makeText(this, R.string.scan_isbn_first, Toast.LENGTH_SHORT).show()
-                return
+        if (isScanningBackCover && tempBookInfo != null) {
+            // 第二步：扫描正面，提取出版社
+            val publisher = bookInfo.publisher
+            
+            if (!publisher.isNullOrEmpty()) {
+                // 识别到出版社，合并信息
+                val finalInfo = tempBookInfo!!.copy(publisher = publisher)
+                val book = finalInfo.toBook()
+                
+                if (book != null) {
+                    bookList.add(0, book)
+                    updateBookList()
+                    Toast.makeText(this, "书籍信息已完整", Toast.LENGTH_SHORT).show()
+                    showBookInfoDetails(book)
+                }
+            } else {
+                // 未识别到出版社，使用API的出版社或直接保存
+                val book = tempBookInfo!!.toBook()
+                if (book != null) {
+                    bookList.add(0, book)
+                    updateBookList()
+                    Toast.makeText(this, "已保存（未识别到出版社）", Toast.LENGTH_SHORT).show()
+                }
             }
             
-            // 如果识别到书名但没有ISBN，提示用户扫描背面
-            tempBookInfo = bookInfo
-            showScanISBNDialog(title)
+            tempBookInfo = null
+            isScanningBackCover = false
+        } else {
+            // 第一步：检查是否识别到ISBN
+            val isbn = bookInfo.isbn
+            if (!isbn.isNullOrEmpty()) {
+                // 识别到ISBN，通过ISBN查询完整信息
+                Toast.makeText(this, "ISBN识别成功，正在查询书籍信息...", Toast.LENGTH_SHORT).show()
+                queryBookInfoByISBN(isbn, bookInfo)
+            } else {
+                // 未识别到ISBN
+                val title = bookInfo.title
+                if (title.isNullOrEmpty()) {
+                    Toast.makeText(this, R.string.scan_isbn_first, Toast.LENGTH_SHORT).show()
+                    return
+                }
+                
+                // 如果识别到书名但没有ISBN，提示用户扫描背面
+                tempBookInfo = bookInfo
+                showScanISBNDialog(title)
+            }
         }
     }
     
@@ -341,22 +370,18 @@ class MainActivity : AppCompatActivity() {
                 showLoading(false)
                 
                 if (apiResult != null) {
-                    // ISBN查询成功，合并OCR识别的信息
-                    val mergedInfo = apiResult.merge(ocrInfo)
-                    val book = mergedInfo.toBook()
+                    // ISBN查询成功，保存到临时变量
+                    tempBookInfo = apiResult.merge(ocrInfo)
+                    isScanningBackCover = false
                     
-                    if (book != null) {
-                        bookList.add(0, book)
-                        updateBookList()
-                        Toast.makeText(
-                            this@MainActivity,
-                            R.string.isbn_query_success,
-                            Toast.LENGTH_SHORT
-                        ).show()
-                        
-                        // 显示详细信息
-                        showBookInfoDetails(book)
-                    }
+                    Toast.makeText(
+                        this@MainActivity,
+                        R.string.isbn_query_success,
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    
+                    // 提示扫描正面补充出版社信息
+                    showScanPublisherDialog(apiResult.title ?: "未知书名")
                 } else {
                     // ISBN查询失败，使用OCR识别的信息
                     Toast.makeText(this@MainActivity, R.string.isbn_query_failed, Toast.LENGTH_SHORT).show()
@@ -394,6 +419,45 @@ class MainActivity : AppCompatActivity() {
             .setTitle("识别成功")
             .setMessage(message)
             .setPositiveButton("确定", null)
+            .show()
+    }
+    
+    /**
+     * 提示扫描出版社的对话框
+     */
+    private fun showScanPublisherDialog(title: String) {
+        val currentInfo = tempBookInfo
+        val message = buildString {
+            append("《$title》\n\n")
+            append("已通过ISBN查询到：\n")
+            currentInfo?.author?.let { append("作者：$it\n") }
+            currentInfo?.isbn?.let { append("ISBN：$it\n") }
+            append("\n是否扫描书籍正面补充出版社信息？")
+        }
+        
+        AlertDialog.Builder(this)
+            .setTitle("扫描正面补充出版社")
+            .setMessage(message)
+            .setPositiveButton("扫描正面") { _, _ ->
+                // 扫描正面获取出版社
+                isScanningBackCover = true  // 复用标志位表示第二步
+                if (permissionManager.hasCameraPermission()) {
+                    startCameraPreview()
+                } else {
+                    permissionManager.requestCameraPermission(cameraPermissionLauncher)
+                }
+            }
+            .setNegativeButton("跳过") { _, _ ->
+                // 直接保存，使用API的出版社（可能为空）
+                val book = tempBookInfo?.toBook()
+                if (book != null) {
+                    bookList.add(0, book)
+                    updateBookList()
+                    showBookInfoDetails(book)
+                }
+                tempBookInfo = null
+            }
+            .setCancelable(false)
             .show()
     }
     
