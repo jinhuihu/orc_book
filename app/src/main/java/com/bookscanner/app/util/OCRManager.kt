@@ -210,12 +210,23 @@ class OCRManager(context: Context) {
             val result = chineseRecognizer.process(image).await()
             val allText = result.text
             
+            // 打印所有识别到的文本（用于调试）
+            Log.d(TAG, "========== OCR识别到的完整文本 ==========")
+            Log.d(TAG, allText)
+            Log.d(TAG, "======================================")
+            
             // 提取各个字段
             val title = extractTitle(result)
             val author = extractAuthor(allText)
             val publisher = extractPublisher(allText)
             val isbn = extractISBN(allText)
             val price = extractPrice(allText)
+            
+            Log.d(TAG, "提取结果 - 书名: $title")
+            Log.d(TAG, "提取结果 - 作者: $author")
+            Log.d(TAG, "提取结果 - 出版社: $publisher")
+            Log.d(TAG, "提取结果 - ISBN: $isbn")
+            Log.d(TAG, "提取结果 - 价格: $price")
             
             com.bookscanner.app.model.BookInfo(
                 title = title,
@@ -242,31 +253,37 @@ class OCRManager(context: Context) {
      * 查找包含"著"、"作者"、"Author"等关键词的文本
      */
     private fun extractAuthor(text: String): String? {
-        val lines = text.split("\n")
+        val lines = text.split("\n").map { it.trim() }
         
         for (line in lines) {
-            val cleanLine = line.trim()
-            // 匹配模式：[国家] 作者名 著
-            if (cleanLine.contains("著") && cleanLine.length < 50) {
-                val author = cleanLine
-                    .replace(Regex("\\[.*?\\]"), "") // 移除国家标记
+            // 模式1：[国家] 作者名 著 或 [国家] 作者名 (英文名) 著
+            if (line.contains("著") && line.length in 3..80) {
+                var author = line
+                    .replace(Regex("\\[.*?\\]"), "") // 移除 [美]、[中] 等
+                    .replace(Regex("\\(.*?\\)"), "") // 暂时移除英文名，后面再加回
                     .replace("著", "")
                     .replace("作者", "")
-                    .replace(":", "")
-                    .replace("：", "")
+                    .replace(Regex("[：:]"), "")
                     .trim()
-                if (author.isNotEmpty() && author.length < 30) {
+                
+                // 如果原文包含英文名，保留它
+                val englishName = Regex("\\((.*?)\\)").find(line)?.groupValues?.get(1)
+                if (englishName != null && englishName.isNotEmpty()) {
+                    author = "$author ($englishName)"
+                }
+                
+                if (author.isNotEmpty() && author.length in 2..50) {
                     return author
                 }
             }
-            // 匹配：作者: XXX
-            if (cleanLine.startsWith("作者") && cleanLine.length < 50) {
-                val author = cleanLine
+            
+            // 模式2：作者: XXX 或 作者：XXX
+            if (line.startsWith("作者") && line.length < 50) {
+                val author = line
                     .replace("作者", "")
-                    .replace(":", "")
-                    .replace("：", "")
+                    .replace(Regex("[：:]"), "")
                     .trim()
-                if (author.isNotEmpty()) {
+                if (author.isNotEmpty() && author.length in 2..30) {
                     return author
                 }
             }
@@ -279,20 +296,36 @@ class OCRManager(context: Context) {
      * 查找包含"出版社"、"出版"等关键词的文本
      */
     private fun extractPublisher(text: String): String? {
-        val lines = text.split("\n")
+        val lines = text.split("\n").map { it.trim() }
         
+        // 优先查找完整匹配
         for (line in lines) {
-            val cleanLine = line.trim()
-            if (cleanLine.contains("出版社") && cleanLine.length < 50) {
-                // 提取出版社名称
-                val publisher = cleanLine
-                    .replace(Regex(".*?(\\S+出版社).*"), "$1")
-                    .trim()
-                if (publisher.contains("出版社")) {
-                    return publisher
+            if (line.contains("出版社") && line.length < 50) {
+                // 方法1：提取 XXX出版社
+                val pattern1 = Regex("([\\u4e00-\\u9fa5]{2,20}出版社)")
+                val match1 = pattern1.find(line)
+                if (match1 != null) {
+                    return match1.value
+                }
+                
+                // 方法2：如果整行都是出版社信息
+                if (line.endsWith("出版社") && !line.contains("著") && !line.contains("作者")) {
+                    return line
                 }
             }
         }
+        
+        // 查找"出版"关键词（可能是"XX出版集团"等）
+        for (line in lines) {
+            if (line.contains("出版") && line.length < 30) {
+                val pattern = Regex("([\\u4e00-\\u9fa5]{2,20}出版[社集团传媒]{0,4})")
+                val match = pattern.find(line)
+                if (match != null) {
+                    return match.value
+                }
+            }
+        }
+        
         return null
     }
     
