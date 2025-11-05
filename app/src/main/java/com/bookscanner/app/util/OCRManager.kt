@@ -117,7 +117,9 @@ class OCRManager(context: Context) {
             // 移除常见的干扰字符
             .replace(Regex("[|｜]"), "")
             // 移除首尾的特殊字符
-            .trim { it in ".,。，;；:：!！?？\"'""''[]【】()（）<>《》" }
+            .trim { char ->
+                char in ".。,，;；:：!！?？\"'`[]【】()（）<>《》\u201c\u201d\u2018\u2019"
+            }
     }
 
     /**
