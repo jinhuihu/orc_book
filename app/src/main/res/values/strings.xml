@@ -32,5 +32,11 @@
     <string name="price">价格</string>
     <string name="no_info">暂无</string>
     <string name="complete_info">补充信息</string>
+    <string name="searching_book_info">正在搜索图书信息…</string>
+    <string name="search_success">搜索成功，信息已补充</string>
+    <string name="search_failed">在线搜索失败，建议扫描背面</string>
+    <string name="select_book">请选择正确的书籍</string>
+    <string name="auto_fill">在线搜索</string>
+    <string name="manual_scan">手动扫描</string>
 </resources>
 

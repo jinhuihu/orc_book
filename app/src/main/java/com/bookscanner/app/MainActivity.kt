@@ -15,8 +15,10 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.bookscanner.app.adapter.BookAdapter
+import com.bookscanner.app.api.BookSearchService
 import com.bookscanner.app.databinding.ActivityMainBinding
 import com.bookscanner.app.model.Book
+import com.bookscanner.app.model.BookInfo
 import com.bookscanner.app.util.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -34,6 +36,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var ocrManager: OCRManager
     private lateinit var excelExporter: ExcelExporter
     private lateinit var bookAdapter: BookAdapter
+    private lateinit var bookSearchService: BookSearchService
 
     // 书籍列表
     private val bookList = mutableListOf<Book>()
@@ -93,6 +96,7 @@ class MainActivity : AppCompatActivity() {
         cameraManager = CameraManager(this)
         ocrManager = OCRManager(this)
         excelExporter = ExcelExporter(this)
+        bookSearchService = BookSearchService()
 
         // 设置工具栏
         setSupportActionBar(binding.toolbar)
@@ -298,7 +302,7 @@ class MainActivity : AppCompatActivity() {
     /**
      * 处理书籍详细信息识别结果
      */
-    private fun handleBookInfoResult(bookInfo: com.bookscanner.app.model.BookInfo) {
+    private fun handleBookInfoResult(bookInfo: BookInfo) {
         showLoading(false)
         
         if (isScanningBackCover && tempBookInfo != null) {
@@ -336,11 +340,108 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this, "识别成功: ${book.title}", Toast.LENGTH_SHORT).show()
                 }
             } else {
-                // 提示扫描背面补充信息
+                // 缺少信息，提供选择：在线搜索 or 手动扫描背面
                 tempBookInfo = bookInfo
+                showInfoCompletionDialog(title)
+            }
+        }
+    }
+    
+    /**
+     * 显示信息补充选择对话框
+     */
+    private fun showInfoCompletionDialog(title: String) {
+        AlertDialog.Builder(this)
+            .setTitle("补充书籍信息")
+            .setMessage("《$title》\n\n选择补充方式：")
+            .setPositiveButton(R.string.auto_fill) { _, _ ->
+                // 在线搜索自动填充
+                searchAndFillBookInfo(title)
+            }
+            .setNeutralButton(R.string.manual_scan) { _, _ ->
+                // 手动扫描背面
+                isScanningBackCover = true
+                if (permissionManager.hasCameraPermission()) {
+                    startCameraPreview()
+                } else {
+                    permissionManager.requestCameraPermission(cameraPermissionLauncher)
+                }
+            }
+            .setNegativeButton(R.string.skip) { _, _ ->
+                // 跳过，直接保存
+                val book = tempBookInfo?.toBook()
+                if (book != null) {
+                    bookList.add(0, book)
+                    updateBookList()
+                    Toast.makeText(this, "已保存: ${book.title}", Toast.LENGTH_SHORT).show()
+                }
+                tempBookInfo = null
+            }
+            .setCancelable(false)
+            .show()
+    }
+    
+    /**
+     * 在线搜索并填充书籍信息
+     */
+    private fun searchAndFillBookInfo(title: String) {
+        showLoading(true)
+        
+        lifecycleScope.launch {
+            try {
+                val searchResults = withContext(Dispatchers.IO) {
+                    bookSearchService.searchBookByTitle(title)
+                }
+                
+                showLoading(false)
+                
+                if (searchResults.isEmpty()) {
+                    // 搜索失败，提示手动扫描
+                    Toast.makeText(this@MainActivity, R.string.search_failed, Toast.LENGTH_SHORT).show()
+                    showScanBackCoverDialog()
+                } else if (searchResults.size == 1) {
+                    // 只有一个结果，直接使用
+                    val mergedInfo = tempBookInfo!!.merge(searchResults[0])
+                    saveBook(mergedInfo)
+                } else {
+                    // 多个结果，让用户选择
+                    showBookSelectionDialog(searchResults)
+                }
+            } catch (e: Exception) {
+                showLoading(false)
+                Toast.makeText(
+                    this@MainActivity,
+                    "${getString(R.string.search_failed)}: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
                 showScanBackCoverDialog()
             }
         }
+    }
+    
+    /**
+     * 显示书籍选择对话框
+     */
+    private fun showBookSelectionDialog(results: List<BookInfo>) {
+        val items = results.map { info ->
+            buildString {
+                append(info.title ?: "未知书名")
+                info.author?.let { append("\n作者: $it") }
+                info.publisher?.let { append("\n出版: $it") }
+            }
+        }.toTypedArray()
+        
+        AlertDialog.Builder(this)
+            .setTitle(R.string.select_book)
+            .setItems(items) { _, which ->
+                val selectedInfo = results[which]
+                val mergedInfo = tempBookInfo!!.merge(selectedInfo)
+                saveBook(mergedInfo)
+            }
+            .setNegativeButton(R.string.manual_scan) { _, _ ->
+                showScanBackCoverDialog()
+            }
+            .show()
     }
     
     /**
@@ -365,12 +466,26 @@ class MainActivity : AppCompatActivity() {
                 if (book != null) {
                     bookList.add(0, book)
                     updateBookList()
-                    Toast.makeText(this, "识别成功: ${book.title}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "已保存: ${book.title}", Toast.LENGTH_SHORT).show()
                 }
                 tempBookInfo = null
             }
             .setCancelable(false)
             .show()
+    }
+    
+    /**
+     * 保存书籍信息
+     */
+    private fun saveBook(bookInfo: BookInfo) {
+        val book = bookInfo.toBook()
+        if (book != null) {
+            bookList.add(0, book)
+            updateBookList()
+            Toast.makeText(this, R.string.search_success, Toast.LENGTH_SHORT).show()
+        }
+        tempBookInfo = null
+        isScanningBackCover = false
     }
 
     /**
