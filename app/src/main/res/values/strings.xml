@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">书籍扫描器</string>
+    <string name="scan_book">扫描书籍</string>
+    <string name="choose_image">选择图片</string>
+    <string name="export_excel">导出Excel</string>
+    <string name="book_list">书籍列表</string>
+    <string name="camera_permission_required">需要相机权限才能扫描书籍</string>
+    <string name="storage_permission_required">需要存储权限才能保存Excel文件</string>
+    <string name="scanning">正在识别…</string>
+    <string name="export_success">Excel文件已保存到: %s</string>
+    <string name="export_failed">导出失败: %s</string>
+    <string name="no_books">还没有扫描任何书籍</string>
+    <string name="delete">删除</string>
+    <string name="book_title">书名</string>
+    <string name="scanned_time">扫描时间</string>
+    <string name="clear_all">清空列表</string>
+    <string name="confirm_clear">确定要清空所有书籍吗？</string>
+    <string name="cancel">取消</string>
+    <string name="confirm">确定</string>
+    <string name="ocr_failed">识别失败，请重试</string>
+    <string name="no_text_detected">未检测到文字</string>
+</resources>
+
