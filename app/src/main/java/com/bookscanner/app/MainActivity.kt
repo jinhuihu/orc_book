@@ -41,9 +41,18 @@ class MainActivity : AppCompatActivity() {
     // 书籍列表
     private val bookList = mutableListOf<Book>()
     
-    // 临时保存的书籍信息（用于两步扫描）
+    // 临时保存的书籍信息（用于多步扫描）
     private var tempBookInfo: com.bookscanner.app.model.BookInfo? = null
-    private var isScanningBackCover = false
+    private var currentScanStep = ScanStep.NONE
+    
+    // 扫描步骤枚举
+    enum class ScanStep {
+        NONE,           // 未开始
+        SCAN_ISBN,      // 第1步：扫描ISBN
+        SCAN_TITLE,     // 第2步：扫描书名
+        SCAN_AUTHOR,    // 第3步：扫描作者
+        SCAN_PUBLISHER  // 第4步：扫描出版社
+    }
 
     // 权限请求启动器 - 相机
     private val cameraPermissionLauncher = registerForActivityResult(
@@ -307,58 +316,202 @@ class MainActivity : AppCompatActivity() {
     
     /**
      * 处理书籍详细信息识别结果
-     * 新逻辑：优先识别ISBN，然后通过ISBN查询完整信息
+     * 智能多步扫描：根据缺失字段逐步提示补充
      */
     private fun handleBookInfoResult(bookInfo: BookInfo) {
         showLoading(false)
         
-        if (isScanningBackCover && tempBookInfo != null) {
-            // 第二步：扫描正面，提取出版社
-            val publisher = bookInfo.publisher
-            
-            if (!publisher.isNullOrEmpty()) {
-                // 识别到出版社，合并信息
-                val finalInfo = tempBookInfo!!.copy(publisher = publisher)
-                val book = finalInfo.toBook()
-                
-                if (book != null) {
-                    bookList.add(0, book)
-                    updateBookList()
-                    Toast.makeText(this, "书籍信息已完整", Toast.LENGTH_SHORT).show()
-                    showBookInfoDetails(book)
-                }
-            } else {
-                // 未识别到出版社，使用API的出版社或直接保存
-                val book = tempBookInfo!!.toBook()
-                if (book != null) {
-                    bookList.add(0, book)
-                    updateBookList()
-                    Toast.makeText(this, "已保存（未识别到出版社）", Toast.LENGTH_SHORT).show()
-                }
+        when (currentScanStep) {
+            ScanStep.NONE, ScanStep.SCAN_ISBN -> {
+                // 第1步：扫描ISBN
+                handleISBNScanResult(bookInfo)
             }
-            
-            tempBookInfo = null
-            isScanningBackCover = false
-        } else {
-            // 第一步：检查是否识别到ISBN
-            val isbn = bookInfo.isbn
-            if (!isbn.isNullOrEmpty()) {
-                // 识别到ISBN，通过ISBN查询完整信息
-                Toast.makeText(this, "ISBN识别成功，正在查询书籍信息...", Toast.LENGTH_SHORT).show()
-                queryBookInfoByISBN(isbn, bookInfo)
-            } else {
-                // 未识别到ISBN
-                val title = bookInfo.title
-                if (title.isNullOrEmpty()) {
-                    Toast.makeText(this, R.string.scan_isbn_first, Toast.LENGTH_SHORT).show()
-                    return
-                }
-                
-                // 如果识别到书名但没有ISBN，提示用户扫描背面
-                tempBookInfo = bookInfo
-                showScanISBNDialog(title)
+            ScanStep.SCAN_TITLE -> {
+                // 第2步：补充书名
+                handleTitleScanResult(bookInfo)
+            }
+            ScanStep.SCAN_AUTHOR -> {
+                // 第3步：补充作者
+                handleAuthorScanResult(bookInfo)
+            }
+            ScanStep.SCAN_PUBLISHER -> {
+                // 第4步：补充出版社
+                handlePublisherScanResult(bookInfo)
             }
         }
+    }
+    
+    /**
+     * 处理ISBN扫描结果
+     */
+    private fun handleISBNScanResult(bookInfo: BookInfo) {
+        val isbn = bookInfo.isbn
+        if (!isbn.isNullOrEmpty()) {
+            // 识别到ISBN，通过ISBN查询完整信息
+            Toast.makeText(this, "ISBN识别成功，正在查询书籍信息...", Toast.LENGTH_SHORT).show()
+            queryBookInfoByISBN(isbn, bookInfo)
+        } else {
+            // 未识别到ISBN，提示重新扫描
+            Toast.makeText(this, R.string.scan_isbn_first, Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    /**
+     * 处理书名扫描结果
+     */
+    private fun handleTitleScanResult(bookInfo: BookInfo) {
+        val title = bookInfo.title
+        if (!title.isNullOrEmpty()) {
+            // 识别到书名，合并信息
+            tempBookInfo = tempBookInfo!!.copy(title = title)
+            Toast.makeText(this, "书名识别成功: $title", Toast.LENGTH_SHORT).show()
+            
+            // 检查下一步需要补充什么
+            checkNextStepAndPrompt()
+        } else {
+            Toast.makeText(this, "未识别到书名，请重新扫描", Toast.LENGTH_SHORT).show()
+            showScanStepDialog(ScanStep.SCAN_TITLE)
+        }
+    }
+    
+    /**
+     * 处理作者扫描结果
+     */
+    private fun handleAuthorScanResult(bookInfo: BookInfo) {
+        val author = bookInfo.author
+        if (!author.isNullOrEmpty()) {
+            // 识别到作者，合并信息
+            tempBookInfo = tempBookInfo!!.copy(author = author)
+            Toast.makeText(this, "作者识别成功: $author", Toast.LENGTH_SHORT).show()
+            
+            // 检查下一步
+            checkNextStepAndPrompt()
+        } else {
+            Toast.makeText(this, "未识别到作者", Toast.LENGTH_SHORT).show()
+            // 允许跳过作者，继续检查出版社
+            checkNextStepAndPrompt()
+        }
+    }
+    
+    /**
+     * 处理出版社扫描结果
+     */
+    private fun handlePublisherScanResult(bookInfo: BookInfo) {
+        val publisher = bookInfo.publisher
+        if (!publisher.isNullOrEmpty()) {
+            // 识别到出版社，合并信息
+            tempBookInfo = tempBookInfo!!.copy(publisher = publisher)
+            Toast.makeText(this, "出版社识别成功: $publisher", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "未识别到出版社", Toast.LENGTH_SHORT).show()
+        }
+        
+        // 所有步骤完成，保存书籍
+        saveCurrentBook()
+    }
+    
+    /**
+     * 检查下一步需要扫描什么并提示
+     */
+    private fun checkNextStepAndPrompt() {
+        val info = tempBookInfo ?: return
+        
+        // 按优先级检查缺失字段
+        when {
+            info.title.isNullOrEmpty() -> {
+                // 缺少书名（必填）
+                currentScanStep = ScanStep.SCAN_TITLE
+                showScanStepDialog(ScanStep.SCAN_TITLE)
+            }
+            info.author.isNullOrEmpty() -> {
+                // 缺少作者
+                currentScanStep = ScanStep.SCAN_AUTHOR
+                showScanStepDialog(ScanStep.SCAN_AUTHOR)
+            }
+            info.publisher.isNullOrEmpty() -> {
+                // 缺少出版社
+                currentScanStep = ScanStep.SCAN_PUBLISHER
+                showScanStepDialog(ScanStep.SCAN_PUBLISHER)
+            }
+            else -> {
+                // 所有信息齐全，保存
+                saveCurrentBook()
+            }
+        }
+    }
+    
+    /**
+     * 显示扫描步骤提示对话框
+     */
+    private fun showScanStepDialog(step: ScanStep) {
+        val (title, message, fieldName) = when (step) {
+            ScanStep.SCAN_TITLE -> Triple(
+                "扫描书名",
+                "未查询到书名信息\n\n请扫描书籍正面识别书名",
+                "书名"
+            )
+            ScanStep.SCAN_AUTHOR -> Triple(
+                "扫描作者",
+                "未查询到作者信息\n\n请扫描书籍正面识别作者\n（包含\"著\"字的行）",
+                "作者"
+            )
+            ScanStep.SCAN_PUBLISHER -> Triple(
+                "扫描出版社",
+                "未查询到出版社信息\n\n请扫描书籍正面识别出版社\n（包含\"出版社\"的文字）",
+                "出版社"
+            )
+            else -> return
+        }
+        
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("扫描") { _, _ ->
+                currentScanStep = step
+                if (permissionManager.hasCameraPermission()) {
+                    startCameraPreview()
+                } else {
+                    permissionManager.requestCameraPermission(cameraPermissionLauncher)
+                }
+            }
+            .setNegativeButton("跳过") { _, _ ->
+                // 跳过当前字段，检查下一个
+                when (step) {
+                    ScanStep.SCAN_TITLE -> {
+                        // 书名不能跳过
+                        Toast.makeText(this, R.string.title_required, Toast.LENGTH_SHORT).show()
+                        showScanStepDialog(step)
+                    }
+                    ScanStep.SCAN_AUTHOR -> {
+                        // 跳过作者，检查出版社
+                        checkNextStepAndPrompt()
+                    }
+                    ScanStep.SCAN_PUBLISHER -> {
+                        // 跳过出版社，直接保存
+                        saveCurrentBook()
+                    }
+                    else -> {}
+                }
+            }
+            .setCancelable(false)
+            .show()
+    }
+    
+    /**
+     * 保存当前书籍
+     */
+    private fun saveCurrentBook() {
+        val book = tempBookInfo?.toBook()
+        if (book != null) {
+            bookList.add(0, book)
+            updateBookList()
+            showBookInfoDetails(book)
+            Toast.makeText(this, "书籍信息已保存", Toast.LENGTH_SHORT).show()
+        }
+        
+        // 重置状态
+        tempBookInfo = null
+        currentScanStep = ScanStep.NONE
     }
     
     /**
@@ -376,9 +529,9 @@ class MainActivity : AppCompatActivity() {
                 showLoading(false)
                 
                 if (apiResult != null) {
-                    // ISBN查询成功，保存到临时变量
+                    // ISBN查询成功，合并OCR识别的信息
                     tempBookInfo = apiResult.merge(ocrInfo)
-                    isScanningBackCover = false
+                    currentScanStep = ScanStep.SCAN_ISBN
                     
                     Toast.makeText(
                         this@MainActivity,
@@ -386,17 +539,15 @@ class MainActivity : AppCompatActivity() {
                         Toast.LENGTH_SHORT
                     ).show()
                     
-                    // 提示扫描正面补充出版社信息
-                    showScanPublisherDialog(apiResult.title ?: "未知书名")
+                    // 检查需要补充哪些信息
+                    checkNextStepAndPrompt()
                 } else {
-                    // ISBN查询失败，使用OCR识别的信息
-                    Toast.makeText(this@MainActivity, R.string.isbn_query_failed, Toast.LENGTH_SHORT).show()
+                    // ISBN查询失败，需要手动扫描所有信息
+                    Toast.makeText(this@MainActivity, "ISBN查询无结果，请手动扫描", Toast.LENGTH_SHORT).show()
                     
-                    val book = ocrInfo.toBook()
-                    if (book != null) {
-                        bookList.add(0, book)
-                        updateBookList()
-                    }
+                    tempBookInfo = ocrInfo
+                    currentScanStep = ScanStep.SCAN_ISBN
+                    checkNextStepAndPrompt()
                 }
             } catch (e: Exception) {
                 showLoading(false)
@@ -405,6 +556,11 @@ class MainActivity : AppCompatActivity() {
                     "${getString(R.string.isbn_query_failed)}: ${e.message}",
                     Toast.LENGTH_SHORT
                 ).show()
+                
+                // 查询失败，使用OCR信息继续
+                tempBookInfo = ocrInfo
+                currentScanStep = ScanStep.SCAN_ISBN
+                checkNextStepAndPrompt()
             }
         }
     }
