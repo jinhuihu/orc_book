@@ -1,5 +1,6 @@
 package com.bookscanner.app.util
 
+import android.content.ContentResolver
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
@@ -25,17 +26,29 @@ object ImageProcessor {
 
     /**
      * 从Uri加载Bitmap并处理旋转
+     * @param contentResolver 用于打开URI的ContentResolver
+     * @param uri 图片URI
      */
-    fun loadBitmapFromUri(uri: Uri, inputStream: InputStream): Bitmap {
-        // 先读取图片方向信息
-        val exif = ExifInterface(inputStream)
-        val orientation = exif.getAttributeInt(
-            ExifInterface.TAG_ORIENTATION,
-            ExifInterface.ORIENTATION_NORMAL
-        )
+    fun loadBitmapFromUri(contentResolver: ContentResolver, uri: Uri): Bitmap {
+        var orientation = ExifInterface.ORIENTATION_NORMAL
+        
+        // 第一次打开流：读取EXIF信息
+        try {
+            contentResolver.openInputStream(uri)?.use { inputStream ->
+                val exif = ExifInterface(inputStream)
+                orientation = exif.getAttributeInt(
+                    ExifInterface.TAG_ORIENTATION,
+                    ExifInterface.ORIENTATION_NORMAL
+                )
+            }
+        } catch (e: Exception) {
+            // 如果读取EXIF失败，使用默认方向
+        }
 
-        // 重新打开流读取图片
-        val bitmap = BitmapFactory.decodeStream(inputStream)
+        // 第二次打开流：读取图片
+        val bitmap = contentResolver.openInputStream(uri)?.use { inputStream ->
+            BitmapFactory.decodeStream(inputStream)
+        } ?: throw Exception("Failed to decode image")
 
         // 根据EXIF信息旋转图片
         return when (orientation) {

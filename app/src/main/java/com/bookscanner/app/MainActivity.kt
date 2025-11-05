@@ -245,9 +245,7 @@ class MainActivity : AppCompatActivity() {
             try {
                 // 加载Bitmap
                 val bitmap = withContext(Dispatchers.IO) {
-                    contentResolver.openInputStream(uri)?.use { inputStream ->
-                        ImageProcessor.loadBitmapFromUri(uri, inputStream)
-                    } ?: throw Exception("Failed to load image")
+                    ImageProcessor.loadBitmapFromUri(contentResolver, uri)
                 }
 
                 // 压缩图片
