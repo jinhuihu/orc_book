@@ -2,6 +2,10 @@ package com.bookscanner.app.util
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
+import android.graphics.Paint
 import android.util.Log
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.Text
@@ -9,6 +13,7 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.tasks.await
+import kotlin.math.max
 
 /**
  * OCR识别管理类
@@ -33,64 +38,157 @@ class OCRManager(context: Context) {
      */
     suspend fun recognizeText(bitmap: Bitmap): String? {
         return try {
-            val image = InputImage.fromBitmap(bitmap, 0)
+            // 1. 图像预处理 - 提高对比度和清晰度
+            val enhancedBitmap = enhanceImage(bitmap)
+            val image = InputImage.fromBitmap(enhancedBitmap, 0)
             
-            // 先尝试中文识别
+            // 2. 先尝试中文识别
             val chineseResult = chineseRecognizer.process(image).await()
             val chineseText = extractBookTitle(chineseResult)
             
-            if (!chineseText.isNullOrEmpty()) {
+            if (!chineseText.isNullOrEmpty() && isValidBookTitle(chineseText)) {
                 Log.d(TAG, "Chinese OCR result: $chineseText")
-                return chineseText
+                return cleanBookTitle(chineseText)
             }
             
-            // 如果中文识别失败，尝试拉丁文识别
+            // 3. 如果中文识别失败，尝试拉丁文识别
             val latinResult = latinRecognizer.process(image).await()
             val latinText = extractBookTitle(latinResult)
             
-            Log.d(TAG, "Latin OCR result: $latinText")
-            latinText
+            if (!latinText.isNullOrEmpty() && isValidBookTitle(latinText)) {
+                Log.d(TAG, "Latin OCR result: $latinText")
+                return cleanBookTitle(latinText)
+            }
+            
+            // 4. 如果都失败，返回任何可用的文本
+            chineseText?.let { cleanBookTitle(it) } ?: latinText?.let { cleanBookTitle(it) }
         } catch (e: Exception) {
             Log.e(TAG, "OCR recognition failed", e)
             null
         }
     }
+    
+    /**
+     * 增强图像 - 提高对比度和清晰度
+     */
+    private fun enhanceImage(bitmap: Bitmap): Bitmap {
+        val enhanced = Bitmap.createBitmap(bitmap.width, bitmap.height, bitmap.config)
+        val canvas = Canvas(enhanced)
+        val paint = Paint()
+        
+        // 创建颜色矩阵增强对比度
+        val colorMatrix = ColorMatrix(floatArrayOf(
+            1.5f, 0f, 0f, 0f, -50f,     // Red
+            0f, 1.5f, 0f, 0f, -50f,     // Green
+            0f, 0f, 1.5f, 0f, -50f,     // Blue
+            0f, 0f, 0f, 1f, 0f          // Alpha
+        ))
+        
+        paint.colorFilter = ColorMatrixColorFilter(colorMatrix)
+        canvas.drawBitmap(bitmap, 0f, 0f, paint)
+        
+        return enhanced
+    }
+    
+    /**
+     * 验证是否为有效的书名
+     */
+    private fun isValidBookTitle(title: String): Boolean {
+        // 过滤太短的文本
+        if (title.length < 2) return false
+        
+        // 过滤纯数字
+        if (title.all { it.isDigit() || it.isWhitespace() }) return false
+        
+        // 过滤只有特殊字符的文本
+        if (title.all { !it.isLetterOrDigit() }) return false
+        
+        return true
+    }
+    
+    /**
+     * 清理书名 - 移除无效字符
+     */
+    private fun cleanBookTitle(title: String): String {
+        return title
+            .trim()
+            // 移除多余的空格
+            .replace(Regex("\\s+"), " ")
+            // 移除常见的干扰字符
+            .replace(Regex("[|｜]"), "")
+            // 移除首尾的特殊字符
+            .trim { it in ".,。，;；:：!！?？\"'""''[]【】()（）<>《》" }
+    }
 
     /**
      * 从识别结果中提取书名
-     * 策略：选择最大的文本块作为书名
+     * 改进策略：综合考虑文本块大小、位置和内容
      */
     private fun extractBookTitle(result: Text): String? {
         if (result.textBlocks.isEmpty()) {
             return null
         }
 
-        // 找出面积最大的文本块（通常书名在封面上最显眼）
-        val largestBlock = result.textBlocks.maxByOrNull { block ->
-            val boundingBox = block.boundingBox
-            if (boundingBox != null) {
-                boundingBox.width() * boundingBox.height()
-            } else {
-                0
+        // 1. 按优先级排序文本块
+        val rankedBlocks = result.textBlocks
+            .filter { block -> 
+                val text = block.text.trim()
+                text.length >= 2 && !text.all { it.isDigit() }
             }
+            .map { block ->
+                val boundingBox = block.boundingBox
+                val text = block.text.trim()
+                
+                // 计算得分
+                var score = 0.0
+                
+                if (boundingBox != null) {
+                    // 面积得分（最重要）
+                    val area = boundingBox.width() * boundingBox.height()
+                    score += area * 0.5
+                    
+                    // 位置得分（书名通常在上半部分）
+                    val imageHeight = max(1, result.textBlocks.maxOfOrNull { 
+                        it.boundingBox?.bottom ?: 0 
+                    } ?: 1)
+                    val topRatio = 1.0 - (boundingBox.top.toDouble() / imageHeight)
+                    score += topRatio * 1000
+                    
+                    // 宽度得分（书名通常比较宽）
+                    score += boundingBox.width() * 0.3
+                }
+                
+                // 文本长度得分（书名通常有一定长度）
+                val lengthScore = when (text.length) {
+                    in 2..4 -> 500.0
+                    in 5..10 -> 1000.0
+                    in 11..20 -> 800.0
+                    else -> 300.0
+                }
+                score += lengthScore
+                
+                // 包含中文加分
+                if (text.any { it in '\u4e00'..'\u9fff' }) {
+                    score += 500.0
+                }
+                
+                Pair(block, score)
+            }
+            .sortedByDescending { it.second }
+        
+        if (rankedBlocks.isEmpty()) {
+            return null
         }
 
-        // 提取文本并清理
-        val title = largestBlock?.text?.trim()
+        // 2. 选择得分最高的文本块
+        val bestBlock = rankedBlocks.first().first
+        val title = bestBlock.text.trim()
         
-        // 如果文本块为空或过短，尝试组合多个文本行
-        if (title.isNullOrEmpty() || title.length < 2) {
-            val allLines = result.textBlocks
-                .flatMap { it.lines }
-                .map { it.text.trim() }
-                .filter { it.isNotEmpty() }
-            
-            return if (allLines.isNotEmpty()) {
-                // 取前3行组合（如果有的话）
-                allLines.take(3).joinToString(" ")
-            } else {
-                null
-            }
+        // 3. 如果单个文本块太短，尝试组合多行
+        if (title.length < 4 && bestBlock.lines.size > 1) {
+            return bestBlock.lines
+                .take(2)
+                .joinToString(" ") { it.text.trim() }
         }
 
         return title
