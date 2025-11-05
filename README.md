@@ -14,7 +14,7 @@
 ## 🚀 技术栈
 
 - **开发语言**: Kotlin
-- **最低SDK**: Android 7.0 (API 24)
+- **最低SDK**: Android 8.0 (API 26)
 - **目标SDK**: Android 14 (API 34)
 - **架构**: MVVM + 协程
 - **主要库**:
