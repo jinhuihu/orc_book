@@ -20,5 +20,17 @@
     <string name="confirm">确定</string>
     <string name="ocr_failed">识别失败，请重试</string>
     <string name="no_text_detected">未检测到文字</string>
+    <string name="scan_front">扫描正面</string>
+    <string name="scan_back">扫描背面</string>
+    <string name="scan_back_for_isbn">扫描背面补充ISBN？</string>
+    <string name="scan_back_prompt">是否扫描书籍背面补充ISBN和价格信息？</string>
+    <string name="skip">跳过</string>
+    <string name="scan">扫描</string>
+    <string name="author">作者</string>
+    <string name="publisher">出版社</string>
+    <string name="isbn">ISBN</string>
+    <string name="price">价格</string>
+    <string name="no_info">暂无</string>
+    <string name="complete_info">补充信息</string>
 </resources>
 

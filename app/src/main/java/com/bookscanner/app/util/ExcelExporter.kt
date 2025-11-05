@@ -38,7 +38,7 @@ class ExcelExporter(private val context: Context) {
             
             // 创建标题行
             val headerRow: Row = sheet.createRow(0)
-            val headers = arrayOf("序号", "书名", "扫描时间")
+            val headers = arrayOf("序号", "书名", "作者", "出版社", "ISBN", "价格", "扫描时间")
             
             headers.forEachIndexed { index, header ->
                 val cell = headerRow.createCell(index)
@@ -56,14 +56,30 @@ class ExcelExporter(private val context: Context) {
                 // 书名
                 row.createCell(1).setCellValue(book.title)
                 
+                // 作者
+                row.createCell(2).setCellValue(book.author.ifEmpty { "-" })
+                
+                // 出版社
+                row.createCell(3).setCellValue(book.publisher.ifEmpty { "-" })
+                
+                // ISBN
+                row.createCell(4).setCellValue(book.isbn.ifEmpty { "-" })
+                
+                // 价格
+                row.createCell(5).setCellValue(book.price.ifEmpty { "-" })
+                
                 // 扫描时间
-                row.createCell(2).setCellValue(book.getFormattedTime())
+                row.createCell(6).setCellValue(book.getFormattedTime())
             }
 
             // 手动设置列宽（Android 不支持 autoSizeColumn）
-            sheet.setColumnWidth(0, 3000)   // 序号列：宽度 3000
-            sheet.setColumnWidth(1, 10000)  // 书名列：宽度 10000
-            sheet.setColumnWidth(2, 6000)   // 扫描时间列：宽度 6000
+            sheet.setColumnWidth(0, 2500)   // 序号列
+            sheet.setColumnWidth(1, 10000)  // 书名列
+            sheet.setColumnWidth(2, 6000)   // 作者列
+            sheet.setColumnWidth(3, 7000)   // 出版社列
+            sheet.setColumnWidth(4, 7000)   // ISBN列
+            sheet.setColumnWidth(5, 3500)   // 价格列
+            sheet.setColumnWidth(6, 5500)   // 扫描时间列
 
             // 生成文件名
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())

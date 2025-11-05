@@ -32,13 +32,24 @@
                 android:ellipsize="end" />
 
             <TextView
+                android:id="@+id/tvBookDetail"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="作者 | 出版社 | ISBN"
+                android:textSize="11sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginTop="2dp"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
                 android:id="@+id/tvScannedTime"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="2024-01-01 12:00"
                 android:textSize="12sp"
                 android:textColor="@color/text_secondary"
-                android:layout_marginTop="4dp" />
+                android:layout_marginTop="2dp" />
 
         </LinearLayout>
 

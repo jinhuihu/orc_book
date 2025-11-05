@@ -38,6 +38,7 @@ class BookAdapter(
 
         fun bind(book: Book) {
             binding.tvBookTitle.text = book.title
+            binding.tvBookDetail.text = book.getDetailInfo()
             binding.tvScannedTime.text = book.getFormattedTime()
             binding.btnDelete.setOnClickListener {
                 onDeleteClick(book)

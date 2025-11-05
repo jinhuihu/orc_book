@@ -37,6 +37,10 @@ class MainActivity : AppCompatActivity() {
 
     // 书籍列表
     private val bookList = mutableListOf<Book>()
+    
+    // 临时保存的书籍信息（用于两步扫描）
+    private var tempBookInfo: com.bookscanner.app.model.BookInfo? = null
+    private var isScanningBackCover = false
 
     // 权限请求启动器 - 相机
     private val cameraPermissionLauncher = registerForActivityResult(
@@ -212,20 +216,21 @@ class MainActivity : AppCompatActivity() {
                     ImageProcessor.toBitmap(imageProxy)
                 }
 
-                // OCR识别
-                val bookTitle = withContext(Dispatchers.Default) {
-                    ocrManager.recognizeText(bitmap)
+                // OCR识别详细信息
+                val bookInfo = withContext(Dispatchers.Default) {
+                    ocrManager.recognizeBookInfo(bitmap)
                 }
 
                 imageProxy.close()
 
                 // 处理结果
-                handleOCRResult(bookTitle)
+                handleBookInfoResult(bookInfo)
                 
                 // 关闭相机预览
                 stopCameraPreview()
             } catch (e: Exception) {
                 showLoading(false)
+                imageProxy.close()
                 Toast.makeText(
                     this@MainActivity,
                     "${getString(R.string.ocr_failed)}: ${e.message}",
@@ -253,13 +258,13 @@ class MainActivity : AppCompatActivity() {
                     ImageProcessor.compressBitmap(bitmap)
                 }
 
-                // OCR识别
-                val bookTitle = withContext(Dispatchers.Default) {
-                    ocrManager.recognizeText(compressedBitmap)
+                // OCR识别详细信息
+                val bookInfo = withContext(Dispatchers.Default) {
+                    ocrManager.recognizeBookInfo(compressedBitmap)
                 }
 
                 // 处理结果
-                handleOCRResult(bookTitle)
+                handleBookInfoResult(bookInfo)
             } catch (e: Exception) {
                 showLoading(false)
                 Toast.makeText(
@@ -288,6 +293,84 @@ class MainActivity : AppCompatActivity() {
         updateBookList()
 
         Toast.makeText(this, "识别成功: $bookTitle", Toast.LENGTH_SHORT).show()
+    }
+    
+    /**
+     * 处理书籍详细信息识别结果
+     */
+    private fun handleBookInfoResult(bookInfo: com.bookscanner.app.model.BookInfo) {
+        showLoading(false)
+        
+        if (isScanningBackCover && tempBookInfo != null) {
+            // 第二步：扫描背面，合并信息
+            val mergedInfo = tempBookInfo!!.merge(bookInfo)
+            val book = mergedInfo.toBook()
+            
+            if (book != null) {
+                bookList.add(0, book)
+                updateBookList()
+                Toast.makeText(this, "书籍信息已完整: ${book.title}", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, R.string.ocr_failed, Toast.LENGTH_SHORT).show()
+            }
+            
+            tempBookInfo = null
+            isScanningBackCover = false
+        } else {
+            // 第一步：扫描正面
+            val title = bookInfo.title
+            if (title.isNullOrEmpty()) {
+                Toast.makeText(this, R.string.no_text_detected, Toast.LENGTH_SHORT).show()
+                return
+            }
+            
+            // 检查是否已有完整信息
+            val hasBackInfo = bookInfo.isbn != null || bookInfo.price != null
+            
+            if (hasBackInfo || (bookInfo.author != null && bookInfo.publisher != null)) {
+                // 已经有完整信息，直接保存
+                val book = bookInfo.toBook()
+                if (book != null) {
+                    bookList.add(0, book)
+                    updateBookList()
+                    Toast.makeText(this, "识别成功: ${book.title}", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                // 提示扫描背面补充信息
+                tempBookInfo = bookInfo
+                showScanBackCoverDialog()
+            }
+        }
+    }
+    
+    /**
+     * 显示扫描背面的对话框
+     */
+    private fun showScanBackCoverDialog() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.scan_back_for_isbn)
+            .setMessage(R.string.scan_back_prompt)
+            .setPositiveButton(R.string.scan) { _, _ ->
+                // 扫描背面
+                isScanningBackCover = true
+                if (permissionManager.hasCameraPermission()) {
+                    startCameraPreview()
+                } else {
+                    permissionManager.requestCameraPermission(cameraPermissionLauncher)
+                }
+            }
+            .setNegativeButton(R.string.skip) { _, _ ->
+                // 跳过，直接保存
+                val book = tempBookInfo?.toBook()
+                if (book != null) {
+                    bookList.add(0, book)
+                    updateBookList()
+                    Toast.makeText(this, "识别成功: ${book.title}", Toast.LENGTH_SHORT).show()
+                }
+                tempBookInfo = null
+            }
+            .setCancelable(false)
+            .show()
     }
 
     /**

@@ -197,6 +197,129 @@ class OCRManager(context: Context) {
     }
 
     /**
+     * 识别书籍详细信息（正面或背面）
+     * @param bitmap 要识别的图片
+     * @return 识别出的书籍信息
+     */
+    suspend fun recognizeBookInfo(bitmap: Bitmap): com.bookscanner.app.model.BookInfo {
+        return try {
+            val enhancedBitmap = enhanceImage(bitmap)
+            val image = InputImage.fromBitmap(enhancedBitmap, 0)
+            
+            // 使用中文识别器获取所有文本
+            val result = chineseRecognizer.process(image).await()
+            val allText = result.text
+            
+            // 提取各个字段
+            val title = extractTitle(result)
+            val author = extractAuthor(allText)
+            val publisher = extractPublisher(allText)
+            val isbn = extractISBN(allText)
+            val price = extractPrice(allText)
+            
+            com.bookscanner.app.model.BookInfo(
+                title = title,
+                author = author,
+                publisher = publisher,
+                isbn = isbn,
+                price = price
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Book info recognition failed", e)
+            com.bookscanner.app.model.BookInfo()
+        }
+    }
+    
+    /**
+     * 提取标题
+     */
+    private fun extractTitle(result: Text): String? {
+        return extractBookTitle(result)
+    }
+    
+    /**
+     * 提取作者信息
+     * 查找包含"著"、"作者"、"Author"等关键词的文本
+     */
+    private fun extractAuthor(text: String): String? {
+        val lines = text.split("\n")
+        
+        for (line in lines) {
+            val cleanLine = line.trim()
+            // 匹配模式：[国家] 作者名 著
+            if (cleanLine.contains("著") && cleanLine.length < 50) {
+                val author = cleanLine
+                    .replace(Regex("\\[.*?\\]"), "") // 移除国家标记
+                    .replace("著", "")
+                    .replace("作者", "")
+                    .replace(":", "")
+                    .replace("：", "")
+                    .trim()
+                if (author.isNotEmpty() && author.length < 30) {
+                    return author
+                }
+            }
+            // 匹配：作者: XXX
+            if (cleanLine.startsWith("作者") && cleanLine.length < 50) {
+                val author = cleanLine
+                    .replace("作者", "")
+                    .replace(":", "")
+                    .replace("：", "")
+                    .trim()
+                if (author.isNotEmpty()) {
+                    return author
+                }
+            }
+        }
+        return null
+    }
+    
+    /**
+     * 提取出版社信息
+     * 查找包含"出版社"、"出版"等关键词的文本
+     */
+    private fun extractPublisher(text: String): String? {
+        val lines = text.split("\n")
+        
+        for (line in lines) {
+            val cleanLine = line.trim()
+            if (cleanLine.contains("出版社") && cleanLine.length < 50) {
+                // 提取出版社名称
+                val publisher = cleanLine
+                    .replace(Regex(".*?(\\S+出版社).*"), "$1")
+                    .trim()
+                if (publisher.contains("出版社")) {
+                    return publisher
+                }
+            }
+        }
+        return null
+    }
+    
+    /**
+     * 提取ISBN
+     * 查找ISBN格式的数字
+     */
+    private fun extractISBN(text: String): String? {
+        // ISBN-13 格式: 978-X-XXXX-XXXX-X 或 9787XXXXXXXXX
+        val isbnPattern = Regex("(?:ISBN[:\\s-]*)?(?:978|979)[-\\s]?\\d{1,5}[-\\s]?\\d{1,7}[-\\s]?\\d{1,7}[-\\s]?\\d")
+        val match = isbnPattern.find(text)
+        return match?.value?.replace(Regex("[^0-9]"), "")?.let { digits ->
+            if (digits.length == 13) "ISBN $digits" else null
+        }
+    }
+    
+    /**
+     * 提取价格
+     * 查找"定价"、"价格"等关键词后的金额
+     */
+    private fun extractPrice(text: String): String? {
+        val pricePattern = Regex("(?:定价|价格)[：:￥]?\\s*([0-9.]+)\\s*元")
+        val match = pricePattern.find(text)
+        return match?.groupValues?.get(1)?.let { "¥$it" }
+    }
+    
+    /**
      * 关闭识别器
      */
     fun close() {
